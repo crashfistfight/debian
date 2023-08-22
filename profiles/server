@@ -65,7 +65,7 @@ EOF
 }
 
 podman_() {
-  local podman_path="/home/$podman_user"
+  podman_path="/home/$podman_user"
 
   sudo DEBIAN_FRONTEND=noninteractive apt install --yes podman buildah
 
@@ -130,7 +130,7 @@ smartd_(){
 DEVICESCAN -a -o on -S on -n standby,q -s (S/../.././02|L/../../7/03) -m root
 EOF
 
-  sudo systemctl enable --now smartd.service
+  sudo systemctl enable --now smartmontools.service
 }
 
 cockpit_() {
