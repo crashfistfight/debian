@@ -36,7 +36,7 @@ dropbear_gateway='192.168.178.1'
 dropbear_netmask='255.255.255.0'
 
 firewall_ports=('60022')
-firewall_services=(cockpit)
+firewall_services=('cockpit')
 
 # script
 
