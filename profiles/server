@@ -1,0 +1,149 @@
+#! /usr/bin/env bash
+
+# shellcheck source=/dev/null
+# shellcheck disable=SC2154
+
+server_() {
+  source "$PWD"/../profiles/default
+
+  ssh_
+  msmtp_
+  podman_
+  podman_auto_updates_
+  smartd_
+}
+
+ssh_() {
+  mkdir --mode=700 "$HOME"/.ssh
+
+  tee "$HOME"/.ssh/authorized_keys > /dev/null <<EOF
+$(printf "%s\n" "${ssh_auth_keys[@]}")
+EOF
+  chmod 600 "$HOME"/.ssh/authorized_keys
+
+  sudo tee /etc/ssh/sshd_config.d/10-custom.conf > /dev/null <<EOF
+Port ${ssh_port} 
+PermitRootLogin no
+PubkeyAuthentication yes
+PasswordAuthentication no
+X11Forwarding no
+EOF
+
+  sudo systemctl restart ssh.service
+}
+
+msmtp_() {
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes msmtp msmtp-mta
+  sudo tee /etc/msmtprc > /dev/null <<EOF
+# Set default values for all following accounts.
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        ~/.msmtp.log
+
+# account
+account        default
+host           ${email_smtp_server}
+port           587
+tls_starttls   on
+from           ${email_from}
+user           ${email_user}
+password       ${email_password}
+
+# Use aliases
+aliases        /etc/aliases
+EOF
+
+  sudo tee /etc/aliases > /dev/null <<EOF
+mailer-daemon:  postmaster
+postmaster:     root
+decode:         root
+root:           ${email_sendto}
+default:        ${email_sendto}
+EOF
+}
+
+podman_() {
+  local podman_path="/home/$podman_user"
+
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes podman buildah
+
+  sudo useradd --create-home "$podman_user"
+  sudo loginctl enable-linger "$podman_user"
+
+  sudo tee --append "$podman_path"/.bashrc > /dev/null <<EOF
+export XDG_RUNTIME_DIR=/run/user/"$(id -u)"
+EOF
+
+  sudo mkdir --parents "$podman_path"{/.config/containers,/.config/systemd/user}
+
+  sudo tee "$podman_path"/.config/containers/containers.conf > /dev/null <<EOF
+tz = "local"
+EOF
+
+  sudo chown -R "$podman_user":"$podman_user" "$podman_path"
+}
+
+podman_auto_updates_() {
+  if [[ "$podman_auto_updates" = "true" ]]; then
+    sudo tee "$podman_path"/.config/systemd/user/podman-auto-update.service > /dev/null <<EOF
+[Unit]
+Description=Podman auto-update service
+Documentation=man:podman-auto-update(1)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/podman auto-update
+ExecStartPost=/usr/bin/podman image prune -f
+
+[Install]
+WantedBy=default.target
+EOF
+
+    sudo tee "$podman_path"/.config/systemd/user/podman-auto-update.timer > /dev/null <<EOF
+[Unit]
+Description=Podman auto-update timer
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl --user daemon-reload
+    systemctl --user enable --now podman-auto-update.timer
+
+    sudo chown -R "$podman_user":"$podman_user" "$podman_path"
+  fi
+}
+
+smartd_(){
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes smartmontools
+
+  sudo tee /etc/smartmontools/smartd.conf > /dev/null <<EOF
+DEVICESCAN -a -o on -S on -n standby,q -s (S/../.././02|L/../../7/03) -m root
+EOF
+
+  sudo systemctl enable --now smartd.service
+}
+
+cockpit_() {
+  if [[ "$cockpit" = "true" ]]; then
+    sudo DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends --yes cockpit
+    sudo DEBIAN_FRONTEND=noninteractive apt install --yes cockpit-machines \
+                                                          cockpit-networkmanager \
+                                                          cockpit-pcp \
+                                                          cockpit-podman
+                                                          cockpit-storaged
+
+    sudo systemctl enable --now cockpit.socket libvirtd.service
+  fi
+}
+
+server_

@@ -1,0 +1,113 @@
+#! /usr/bin/env bash
+
+# shellcheck disable=SC2154
+
+default_() {
+  packages_
+  bash_prompt_
+  hostname_
+  vim_
+  auto_updates_
+  network_manager_
+  zram_
+  firewalld_
+}
+
+default_packages_() {
+  local packages=(
+    "htop"
+    "bash-completion"
+    "rsync"
+    "locales-all"
+    "firewalld"
+    "wget"
+    "curl"
+  )
+  sudo DEBIAN_FRONTEND=noninteractive apt update && apt install --yes "${packages[@]}"
+}
+
+bash_prompt_() {
+  sudo tee /etc/profile.d/prompt.sh > /dev/null <<EOF
+#! /usr/bin/env bash
+
+export PS1="[\[\e[31m\]\u\[\e[m\]@\h] \[\e[01;31m\]:\[\e[m\]\[\e[01;31m\]:\[\e[m\] \W \[\e[01;31m\]>\[\e[m\] "
+EOF
+}
+
+hostname_() {
+  sudo hostnamectl set-hostname "$hostname"
+  sudo sed --in-place "s@^127.0.1.1@127.0.1.1       ${hostname}@" /etc/hosts
+}
+
+vim_() {
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes vim
+  sudo tee /etc/vimrc > /dev/null <<EOF
+set autoindent
+set autoread
+set autowrite
+set expandtab
+set hidden
+set ignorecase
+set incsearch
+set laststatus=2
+set linebreak
+set list listchars=tab:▸\ ,trail:·
+set nofoldenable
+set nojoinspaces
+set number
+set path+=**
+set printoptions=paper:A4,syntax:n,number:y
+set shiftwidth=4
+set showbreak=↪\
+set splitbelow
+set splitright
+set statusline=\(%n\)\ %<%.99f\ %y\ %w%m%r%=%-14.(%l,%c%V%)\ %P
+set tabstop=4
+set textwidth=120
+set wrapscan
+set backspace=indent,eol,start
+EOF
+}
+
+zram_() {
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes zram-tools
+  sudo tee /etc/default/zramswap > /dev/null <<EOF
+ALGO=lzo-rle
+PERCENT=50
+EOF
+
+sudo systemctl reload zramswap.service
+}
+
+auto_updates_() {
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes unattended-upgrades
+  if [[ "$auto_updates" = "all" ]]; then
+    sed --in-place '\@}-updates";@s@^//@@' /etc/apt/apt.conf.d/50unattended-upgrades
+  fi
+
+  sudo tee /etc/apt/apt.conf.d/20auto-upgrades > /dev/null <<EOF
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+EOF
+}
+
+network_manager_() {
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes network-manager
+  sudo sed --in-place "s@^managed@managed=true@" /etc/NetworkManager/NetworkManager.conf
+  sudo systemctl restart NetworkManager.service
+}
+
+firewalld_() {
+  for i in "${firewall_ports[@]}"; do
+    sudo firewall-cmd --add-port="$i" --permanent --quiet
+    sudo firewall-cmd --reload --quiet
+  done
+
+  for i in "${firewall_services[@]}"; do
+    sudo firewall-cmd --add-service="$i" --permanent --quiet
+    sudo firewall-cmd --reload --quiet
+  done
+}
+
+default_

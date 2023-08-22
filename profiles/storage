@@ -1,0 +1,89 @@
+#! /usr/bin/env bash
+
+# shellcheck source=/dev/null
+# shellcheck disable=SC2154
+
+
+storage_() {
+  source "$PWD"/../profiles/server
+
+  zfs_
+  dropbear_
+}
+
+zfs_() {
+  sudo tee /etc/apt/sources.list.d/backports.list > /dev/null <<EOF
+deb http://deb.debian.org/debian bullseye-backports main contrib
+deb-src http://deb.debian.org/debian bullseye-backports main contrib
+EOF
+
+  sudo tee /etc/apt/preferences.d/90_zfs > /dev/null <<EOF
+Package: src:zfs-linux
+Pin: release n=bullseye-backports
+Pin-Priority: 990
+EOF
+
+  sudo apt update
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers-amd64 dpkg-dev
+  sudo DEBIAN_FRONTEND=noninteractive apt install --yes zfs-dkms zfsutils-linux
+
+  if [[ -z "$zfs_pool_name" ]]; then
+    sudo dd if=/dev/random of="$zfs_key_path" bs=1 count=32
+
+    sudo zpool create \
+      -o ashift=12 \
+      -o autotrim=on \
+      -O encryption=on -O keylocation=file:///"$zfs_key_path" -O keyformat=raw \
+      -O acltype=posixacl -O xattr=sa -O dnodesize=auto \
+      -O compression=lz4 \
+      -O normalization=formD \
+      -O relatime=on \
+      "$zfs_pool_name" mirror /dev/disk/by-id/"$zfs_device0" /dev/disk/by-id/"$zfs_device1"
+  fi
+
+  sudo tee /etc/modprobe.d/zfs.conf > /dev/null <<EOF
+options zfs zfs_arc_max=4294967296
+EOF
+  sudo update-initramfs -u
+
+  sudo tee /etc/systemd/system/zfs-load-key.service > /dev/null <<EOF
+[Unit]
+Description=Load encryption keys
+DefaultDependencies=no
+After=zfs-import.target
+Before=zfs-mount.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/sbin/zfs load-key -a
+StandardInput=tty-force
+
+[Install]
+WantedBy=zfs-mount.service
+EOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable zfs-load-key.service
+}
+
+dropbear_() {
+  sudo apt install --yes dropbear-initramfs
+
+  sudo tee /etc/dropbear/initramfs/dropbear.conf > /dev/null <<EOF
+DROPBEAR_OPTIONS="-I 180 -j -k -p ${dropbear_port} -s -c cryptroot-unlock"
+EOF
+
+  sudo mkdir /etc/initramfs-tools/conf.d
+  sudo tee /etc/initramfs-tools/conf.d/dropbear > /dev/null <<EOF
+IP=${dropbear_ip}::${dropbear_gateway}:${dropbear_netmask}:${hostname}-dropbear:${dropbear_interface}
+EOF
+
+  sudo tee /etc/dropbear/initramfs/authorized_keys > /dev/null <<EOF
+$(printf "%s\n" "${ssh_auth_keys[@]}")
+EOF
+
+sudo update-initramfs -u
+}
+
+storage_

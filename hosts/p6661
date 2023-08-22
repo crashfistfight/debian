@@ -1,0 +1,78 @@
+#! /usr/bin/env bash
+
+
+# shellcheck source=/dev/null
+# shellcheck disable=SC2034
+
+# vars
+
+hostname='p6661'
+
+#auto_updates='all'
+
+ssh_port='60022'
+ssh_auth_keys=('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJUESoA/Z+r3a3yAT46p7k9b7Jq04BVsvz9vHG4tqan1 rico@x395')
+
+email_smtp_server=''
+email_from='p6661@'
+email_user=''
+email_password=''
+email_sendto=''
+
+podman_user='podman'
+podman_auto_updates='true'
+
+cockpit='true'
+
+zfs_pool_name=''
+zfs_key_path='/root/.zfs-key'
+zfs_device0=''
+zfs_device1=''
+
+dropbear_port='60023'
+dropbear_interface=''
+dropbear_ip='192.168.178.100'
+dropbear_gateway='192.168.178.1'
+dropbear_netmask='255.255.255.0'
+
+firewall_ports=('60022')
+firewall_services=(cockpit)
+
+# script
+
+host_() {
+  source "$PWD"/../profiles/storage
+
+  setterm_
+  logind_
+}
+
+setterm_() {
+  sudo tee /etc/systemd/system/setterm-powerdown.service > /dev/null <<EOF
+[Unit]
+Description=Setterm powerdown after 1 minute
+
+[Service]
+Type=simple
+Environment=TERM=linux
+ExecStart=/usr/bin/sh -c "setterm --blank 1 --powerdown 1 >/dev/tty1 </dev/tty1"
+
+[Install]
+WantedBy=default.target
+EOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now setterm-powerdown.service
+}
+
+logind_() {
+  sudo mkdir /etc/systemd/logind.conf.d/
+
+  sudo tee /etc/systemd/logind.conf.d/handlelid.conf > /dev/null <<EOF
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+EOF
+}
+
+host_
