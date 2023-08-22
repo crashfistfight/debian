@@ -13,13 +13,13 @@ storage_() {
 
 zfs_() {
   sudo tee /etc/apt/sources.list.d/backports.list > /dev/null <<EOF
-deb http://deb.debian.org/debian bullseye-backports main contrib
-deb-src http://deb.debian.org/debian bullseye-backports main contrib
+deb http://deb.debian.org/debian bookworm-backports main contrib
+deb-src http://deb.debian.org/debian bookworm-backports main contrib
 EOF
 
   sudo tee /etc/apt/preferences.d/90_zfs > /dev/null <<EOF
 Package: src:zfs-linux
-Pin: release n=bullseye-backports
+Pin: release n=bookworm-backports
 Pin-Priority: 990
 EOF
 
@@ -27,7 +27,7 @@ EOF
   sudo DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers-amd64 dpkg-dev
   sudo DEBIAN_FRONTEND=noninteractive apt install --yes zfs-dkms zfsutils-linux
 
-  if [[ -z "$zfs_pool_name" ]]; then
+  if [[ "$zfs_pool_name" = "*" ]]; then
     sudo dd if=/dev/random of="$zfs_key_path" bs=1 count=32
 
     sudo zpool create \
