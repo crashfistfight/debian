@@ -11,6 +11,7 @@ server_() {
   podman_
   podman_auto_updates_
   smartd_
+  cockpit_
 }
 
 ssh_() {
