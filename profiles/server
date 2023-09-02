@@ -136,12 +136,15 @@ EOF
 
 cockpit_() {
   if [[ "$cockpit" = "true" ]]; then
-    sudo DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends --yes cockpit
-    sudo DEBIAN_FRONTEND=noninteractive apt install --yes cockpit-machines \
-                                                          cockpit-networkmanager \
-                                                          cockpit-pcp \
-                                                          cockpit-podman
-                                                          cockpit-storaged
+    sudo DEBIAN_FRONTEND=noninteractive apt install --no-install-recommends--yes \
+      cockpit
+    
+    sudo DEBIAN_FRONTEND=noninteractive apt install --yes \
+      cockpit-machines \
+      cockpit-networkmanager \
+      cockpit-pcp \
+      cockpit-podman \
+      cockpit-storaged
 
     sudo systemctl enable --now cockpit.socket libvirtd.service
   fi
